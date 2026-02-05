@@ -1,36 +1,50 @@
 const db = require("./config/db");
 const { hashPassword, comparePassword } = require("./utils/passwordUtils");
+const { generateToken, verifyToken } = require("./utils/jwtUtils");
 
 async function testAuth() {
   try {
     console.log("---1. Registering User ---");
-    const username = "SecureSteve";
-    const plainTextPassword = "mySuperSecretPassword123";
+
+    // making random users so we don't get duplicate key
+    const randomNum = Math.floor(Math.random() * 1000);
+    const username = `User${randomNum}`;
+    const email = `user${randomNum}@test.com`;
+    const plainPassword = "password123";
 
     // Hash it
-    console.log(`Original: ${plainTextPassword}`);
-    const hashedPassword = await hashPassword(plainTextPassword);
-    console.log(`Hashed: ${hashedPassword}`);
+    const hashedPassword = await hashPassword(plainPassword);
 
     // Save to db
     const res = await db.query(
       "insert into users (username, email, password) values ($1, $2, $3) returning *",
-      [username, "steve@test.com", hashedPassword],
+      [username, email, hashedPassword],
     );
-    console.log("user saved to DB:", res.rows[0]);
+    user = res.rows[0];
+    console.log("user saved to DB:", user);
 
-    // verifying user (fake login)
-    console.log("\n--- fake login ---");
+    console.log(" \n--- login (day 1) ---");
+    const isMatch = await comparePassword(plainPassword, user.password);
 
-    // pretend we fetched user from db
-    const userFromDb = res.rows[0];
+    if (!isMatch) {
+      throw new Error("wrong password!");
+    }
+    console.log("password verified.");
 
-    // compare wrong password
-    const isMatchBad = await comparePassword(
-      "wrongPassword",
-      userFromDb.password,
-    );
-    console.log(`${isMatchBad ? "login successfully" : "login failed"}`);
+    console.log("--- issue jwt(day 2) ---");
+    const token = generateToken(user);
+    console.log("jwt generated:");
+    console.log(token);
+
+    // simulate the user coming back later with the token
+    try {
+      const decoded = verifyToken(token);
+      console.log("token is valid! user data inside:");
+      console.log(decoded);
+      
+    } catch (error) {
+      console.log("token rejected:", error.message);
+    }
   } catch (error) {
     console.error("error:", error.message);
   }
