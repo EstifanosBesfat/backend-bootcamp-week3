@@ -1,53 +1,50 @@
-const db = require("./config/db");
-const { hashPassword, comparePassword } = require("./utils/passwordUtils");
-const { generateToken, verifyToken } = require("./utils/jwtUtils");
+require('dotenv').config();
+const express = require('express');
+const app = express();
+const db = require('./config/db');
+const { hashPassword, comparePassword } = require('./utils/passwordUtils');
+const { generateToken } = require('./utils/jwtUtils');
+const authenticateToken = require('./middlewares/authMiddlewere');
 
-async function testAuth() {
-  try {
-    console.log("---1. Registering User ---");
+// Middleware to parse JSON bodies
+app.use(express.json());
 
-    // making random users so we don't get duplicate key
-    const randomNum = Math.floor(Math.random() * 1000);
-    const username = `User${randomNum}`;
-    const email = `user${randomNum}@test.com`;
-    const plainPassword = "password123";
+// --- ROUTE 1: LOGIN (Public) ---
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
 
-    // Hash it
-    const hashedPassword = await hashPassword(plainPassword);
-
-    // Save to db
-    const res = await db.query(
-      "insert into users (username, email, password) values ($1, $2, $3) returning *",
-      [username, email, hashedPassword],
-    );
-    user = res.rows[0];
-    console.log("user saved to DB:", user);
-
-    console.log(" \n--- login (day 1) ---");
-    const isMatch = await comparePassword(plainPassword, user.password);
-
-    if (!isMatch) {
-      throw new Error("wrong password!");
-    }
-    console.log("password verified.");
-
-    console.log("--- issue jwt(day 2) ---");
-    const token = generateToken(user);
-    console.log("jwt generated:");
-    console.log(token);
-
-    // simulate the user coming back later with the token
     try {
-      const decoded = verifyToken(token);
-      console.log("token is valid! user data inside:");
-      console.log(decoded);
-      
-    } catch (error) {
-      console.log("token rejected:", error.message);
-    }
-  } catch (error) {
-    console.error("error:", error.message);
-  }
-}
+        // 1. Find user in DB
+        const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
+        const user = result.rows[0];
 
-testAuth();
+        if (!user) return res.status(400).json({ error: "User not found" });
+
+        // 2. Check Password
+        const validPass = await comparePassword(password, user.password);
+        if (!validPass) return res.status(400).json({ error: "Invalid password" });
+
+        // 3. Generate Token
+        const token = generateToken(user);
+        res.json({ message: "Login Successful", token });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// --- ROUTE 2: PROFILE (Protected) ---
+// Notice 'authenticateToken' is here!
+app.get('/profile', authenticateToken, (req, res) => {
+    // If we get here, the token is valid.
+    // We can access req.user because the middleware attached it.
+    res.json({ 
+        message: "Welcome to the VIP area", 
+        user: req.user // This comes from the token!
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+});
