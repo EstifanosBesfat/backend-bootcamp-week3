@@ -2,16 +2,42 @@ require("dotenv").config();
 const express = require("express");
 const app = express();
 const db = require("./config/db");
-const { hashPassword, comparePassword } = require("./utils/passwordUtils");
+const {
+  hashPassword,
+  comparePassword,
+} = require("./utils/passwordUtils");
 const { generateToken } = require("./utils/jwtUtils");
 const authenticateToken = require("./middlewares/authMiddlewere");
 const authorizeRoles = require("./middlewares/roleMiddleware");
-
+const {
+  validateRegister,
+  validateLogin,
+} = require("./middlewares/validationMiddleware");
 // Middleware to parse JSON bodies
 app.use(express.json());
 
+app.post("/register", validateRegister, async (req, res) => {
+  const { username, email, password } = req.body;
+  try {
+    const check = await db.query("select * from users where email = $1", [
+      email,
+    ]);
+    if (check.rows.length > 0) {
+      return res.status(400).json({ error: "user already exists" });
+    }
+    const hashedPassword = await hashPassword(password);
+    const result = await db.query(
+      "insert into users (username, email, password) values ($1, $2, $3) returning id, username, email, role",
+      [username, email, hashedPassword],
+    );
+    res.status(201).json({ message: "user registered", user: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // --- ROUTE 1: LOGIN (Public) ---
-app.post("/login", async (req, res) => {
+app.post("/login",validateLogin, async (req, res) => {
   const { email, password } = req.body;
 
   try {
