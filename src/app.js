@@ -13,8 +13,13 @@ const {
   validateRegister,
   validateLogin,
 } = require("./middlewares/validationMiddleware");
+const helmet = require('helmet');
+
 // Middleware to parse JSON bodies
 app.use(express.json());
+
+// to stop common browser attacks (like xss)
+app.use(helmet()); 
 
 app.post("/register", validateRegister, async (req, res) => {
   const { username, email, password } = req.body;
@@ -47,11 +52,11 @@ app.post("/login",validateLogin, async (req, res) => {
     ]);
     const user = result.rows[0];
 
-    if (!user) return res.status(400).json({ error: "User not found" });
+    if (!user) return res.status(400).json({ error: "Invalid email or password" });
 
     // 2. Check Password
     const validPass = await comparePassword(password, user.password);
-    if (!validPass) return res.status(400).json({ error: "Invalid password" });
+    if (!validPass) return res.status(400).json({ error: "Invalid email or password" });
 
     // 3. Generate Token
     const token = generateToken(user);
