@@ -1,50 +1,62 @@
-require('dotenv').config();
-const express = require('express');
+require("dotenv").config();
+const express = require("express");
 const app = express();
-const db = require('./config/db');
-const { hashPassword, comparePassword } = require('./utils/passwordUtils');
-const { generateToken } = require('./utils/jwtUtils');
-const authenticateToken = require('./middlewares/authMiddlewere');
+const db = require("./config/db");
+const { hashPassword, comparePassword } = require("./utils/passwordUtils");
+const { generateToken } = require("./utils/jwtUtils");
+const authenticateToken = require("./middlewares/authMiddlewere");
+const authorizeRoles = require("./middlewares/roleMiddleware");
 
 // Middleware to parse JSON bodies
 app.use(express.json());
 
 // --- ROUTE 1: LOGIN (Public) ---
-app.post('/login', async (req, res) => {
-    const { email, password } = req.body;
+app.post("/login", async (req, res) => {
+  const { email, password } = req.body;
 
-    try {
-        // 1. Find user in DB
-        const result = await db.query("SELECT * FROM users WHERE email = $1", [email]);
-        const user = result.rows[0];
+  try {
+    // 1. Find user in DB
+    const result = await db.query("SELECT * FROM users WHERE email = $1", [
+      email,
+    ]);
+    const user = result.rows[0];
 
-        if (!user) return res.status(400).json({ error: "User not found" });
+    if (!user) return res.status(400).json({ error: "User not found" });
 
-        // 2. Check Password
-        const validPass = await comparePassword(password, user.password);
-        if (!validPass) return res.status(400).json({ error: "Invalid password" });
+    // 2. Check Password
+    const validPass = await comparePassword(password, user.password);
+    if (!validPass) return res.status(400).json({ error: "Invalid password" });
 
-        // 3. Generate Token
-        const token = generateToken(user);
-        res.json({ message: "Login Successful", token });
-
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+    // 3. Generate Token
+    const token = generateToken(user);
+    res.json({ message: "Login Successful", token });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- ROUTE 2: PROFILE (Protected) ---
 // Notice 'authenticateToken' is here!
-app.get('/profile', authenticateToken, (req, res) => {
-    // If we get here, the token is valid.
-    // We can access req.user because the middleware attached it.
-    res.json({ 
-        message: "Welcome to the VIP area", 
-        user: req.user // This comes from the token!
-    });
+app.get("/profile", authenticateToken, (req, res) => {
+  // If we get here, the token is valid.
+  // We can access req.user because the middleware attached it.
+  res.json({
+    message: "Welcome to the VIP area",
+    user: req.user, // This comes from the token!
+  });
+});
+
+//---ROUTE 3: admin panel (protected + Admin Only) ---
+// 1. authenticateToken (check who they are) -> adds req.user
+// 2. authorizeRoles('admin') (check permission) -> cheks req.user. role
+app.get("/admin", authenticateToken, authorizeRoles("admin"), (req, res) => {
+  res.json({
+    message: "Welcome, admin. You have supreme power.",
+    secretData: "The launch codes are 1234",
+  });
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`🚀 Server running on port ${PORT}`);
 });
